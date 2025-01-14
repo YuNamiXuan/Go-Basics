@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 )
 
 type Server struct {
@@ -15,7 +16,7 @@ type Server struct {
 	Message   chan string
 }
 
-// 创建一个server的API
+// 创建server
 func NewServer(ip string, port int) *Server {
 	server := &Server{
 		Ip:        ip,
@@ -40,47 +41,54 @@ func (s *Server) ListenMessage() {
 	}
 }
 
-// 将上线消息传递至Message Channel
+// 广播消息
 func (s *Server) BroadCast(u *User, m string) {
 	sendM := "[" + u.Addr + "]" + u.Name + ":" + m
 	s.Message <- sendM
 }
 
+// 处理user需求
 func (s *Server) Handler(conn net.Conn) {
-	user := NewUser(conn)
+	user := NewUser(conn, s)
 
-	// 将用户加入在线列表中
-	s.maplock.Lock()
-	s.OnlineMap[user.Name] = user
-	s.maplock.Unlock()
+	user.Online()
 
-	// 广播用户上线消息
-	s.BroadCast(user, "已上线")
+	isLive := make(chan bool)
 
-	// 广播用户发送的消息
 	go func() {
 		buf := make([]byte, 4096)
 		for {
 			n, err := conn.Read(buf)
 			if n == 0 {
-				s.BroadCast(user, "下线")
+				user.Offline()
 				return
 			}
-
 			if err != nil && err != io.EOF {
 				fmt.Println("Error read conn:", err)
 				return
 			}
 
 			message := string(buf[:n-1])
-			s.BroadCast(user, message)
+			user.ProcessMessage(message)
+
+			isLive <- true
 		}
 	}()
 
-	select {}
+	for {
+		select {
+		case <-isLive:
+
+		case <-time.After(time.Second * 30):
+			user.SendMessage("已超时，被强制下线")
+			close(user.C)
+			conn.Close()
+			return
+		}
+	}
 }
 
-// 启动服务器的方法
+// 启动server
 func (s *Server) Start() {
 	// socket listening
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.Ip, s.Port))
