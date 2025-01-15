@@ -48,60 +48,64 @@ func (u *User) Offline() {
 	delete(u.server.OnlineMap, u.Name)
 	u.server.maplock.Unlock()
 
+	// close(u.C)
 	// 广播用户下线消息
 	u.server.BroadCast(u, "已下线")
 }
 
-// 给当前用户发送消息
+// 给当前用户的客户端发送消息
 func (u *User) SendMessage(message string) {
 	u.conn.Write([]byte(message))
 }
 
 // 处理消息
 func (u *User) ProcessMessage(message string) {
+	// message = strings.TrimSpace(message)
 
 	if message == "who" {
 		// 使用who查询在线用户列表
 		u.server.maplock.Lock()
 		for _, user := range u.server.OnlineMap {
-			onlineMessage := "[" + user.Addr + "]" + user.Name + "\n"
+			onlineMessage := "[" + user.Addr + "]" + user.Name + "在线...\n"
 			u.SendMessage(onlineMessage)
 		}
 		u.server.maplock.Unlock()
 
-	} else if len(message) > 7 && message[:7] == "rename|" {
+	} else if strings.HasPrefix(message, "rename|") {
 		// 使用rename|修改用户名
-		newName := strings.Split(message, "|")[1]
-		_, ok := u.server.OnlineMap[newName]
-		if ok {
-			u.SendMessage("该用户名已存在")
-		} else {
-			u.server.maplock.Lock()
-			delete(u.server.OnlineMap, newName)
-			u.server.OnlineMap[newName] = u
-			u.server.maplock.Unlock()
-			u.Name = newName
-			u.SendMessage("用户名修改成功")
+		parts := strings.SplitN(message, "|", 2)
+		if len(parts) != 2 {
+			u.SendMessage("格式错误，正确格式为: rename|新用户名\n")
+			return
 		}
+		newName := parts[1]
+		u.server.maplock.Lock()
+		if _, exists := u.server.OnlineMap[newName]; exists {
+			u.SendMessage("该用户已存在\n")
+		} else {
+			delete(u.server.OnlineMap, u.Name)
+			u.Name = newName
+			u.server.OnlineMap[newName] = u
+			u.SendMessage("用户名修改成功\n")
+		}
+		u.server.maplock.Unlock()
 
 	} else if len(message) > 4 && message[:3] == "to|" {
 		// 单独发送用户消息 格式：to|username|message
-		username := strings.Split(message, "|")[1]
-		sendmessage := strings.Split(message, "|")[2]
-		if username == "" {
-			u.SendMessage("消息格式不正确")
+		parts := strings.SplitN(message, "|", 3)
+		if len(parts) != 3 {
+			u.SendMessage("格式错误，正确格式为: to|用户名|消息内容\n")
+		}
+		username, sendMessage := parts[1], parts[2]
+
+		u.server.maplock.Lock()
+		user, exist := u.server.OnlineMap[username]
+		u.server.maplock.Unlock()
+		if !exist {
+			u.SendMessage("该用户不存在\n")
 			return
 		}
-		user, ok := u.server.OnlineMap[username]
-		if !ok {
-			u.SendMessage("该用户不存在")
-			return
-		}
-		if sendmessage == "" {
-			u.SendMessage("当前消息为空")
-		} else {
-			user.SendMessage(u.Name + "说: " + sendmessage)
-		}
+		user.SendMessage(u.Name + "对你说: " + sendMessage)
 
 	} else {
 		// 广播用户消息

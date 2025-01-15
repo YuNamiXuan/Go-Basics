@@ -64,13 +64,12 @@ func (s *Server) Handler(conn net.Conn) {
 				return
 			}
 			if err != nil && err != io.EOF {
-				fmt.Println("Error read conn:", err)
+				fmt.Println("Error reading from conn:", err)
 				return
 			}
 
 			message := string(buf[:n-1])
 			user.ProcessMessage(message)
-
 			isLive <- true
 		}
 	}()
@@ -79,9 +78,8 @@ func (s *Server) Handler(conn net.Conn) {
 		select {
 		case <-isLive:
 
-		case <-time.After(time.Second * 30):
+		case <-time.After(time.Second * 300):
 			user.SendMessage("已超时，被强制下线")
-			close(user.C)
 			conn.Close()
 			return
 		}
