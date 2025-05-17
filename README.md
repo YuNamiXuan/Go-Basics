@@ -1,2 +1,2 @@
 ## The Basics of Golang for beginners
-- net: Some cases about socket programming
+- net: some cases about socket programming
