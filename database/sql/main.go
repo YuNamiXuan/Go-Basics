@@ -7,26 +7,47 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
+// Define a struct to hold row data
+type myRow struct {
+	id   int
+	name string
+}
+
 func main() {
-	db, err := sql.Open("mysql", "root:Cyx20030922.@tcp(127.0.0.1:3306)/bluebell?charset=utf8mb4&parseTime=True&loc=Local")
+	// Establish database connection
+	// Format: "username:password@protocol(address:port)/database?parameters"
+	db, err := sql.Open("mysql", "user:password@tcp(127.0.0.1:3306)/database?charset=utf8mb4&parseTime=True&loc=Local")
 	if err != nil {
-		panic(err.Error())
+		fmt.Println("Connect to database failed: ", err)
+		return
 	}
 	defer db.Close()
 
-	rows, err := db.Query("SELECT title, content FROM post")
+	// Execute SQL query to select data
+	rows, err := db.Query("SELECT id, name FROM your_table")
 	if err != nil {
-		panic(err.Error())
+		fmt.Println("Execute SQL failed: ", err)
+		return
 	}
 	defer rows.Close()
 
+	// Iterate through each row in the result set
 	for rows.Next() {
-		var titile string
-		var content string
-		err = rows.Scan(&titile, &content)
+		var row myRow
+
+		// Scan copies the current row's columns into the struct fields
+		// Note: The order and number of arguments must match the SELECT columns
+		err = rows.Scan(&row.id, &row.name)
 		if err != nil {
-			panic(err.Error())
+			fmt.Println("Copy columns into struct fields failed: ", err)
+			return
 		}
-		fmt.Println(titile, content)
+		fmt.Println(row)
+	}
+
+	// Check for any errors that occurred during iteration
+	if err := rows.Err(); err != nil {
+		fmt.Println("Iterate rows failed: ", err)
+		return
 	}
 }
